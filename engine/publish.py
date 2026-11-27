@@ -25,7 +25,7 @@ DRY = DRY_ASKED or not LIVE
 UA = {"User-Agent": "HydraEngine/1.0"}
 QUOTES = os.path.join(HERE, "quotes.csv")
 POSTED = os.path.join(HERE, "posted.csv")
-PCOLS = ["posted_utc", "slot", "quote_id", "theme", "media_id", "permalink", "audio_id", "audio_title", "audio_artist", "audio_source", "cta"]
+PCOLS = ["posted_utc", "slot", "quote_id", "theme", "media_id", "permalink", "audio_id", "audio_title", "audio_artist", "audio_source", "cta", "promo"]
 import intel  # noqa: E402
 INTEL = intel.load()
 
@@ -82,6 +82,46 @@ def pick_quote(posted):
     pool = [q for q in quotes if q["id"] not in recent] or quotes
     pool.sort(key=lambda q: scores.get(q["id"], 0), reverse=True)
     return pool[0]
+
+
+# ---------- sister-channel mention (1 in 10 Reels) ----------
+PROMO_EVERY = 10
+
+
+def sister():
+    """The next live sister channel in the same language, rotating; None if there isn't one."""
+    me = os.path.basename(HERE.rstrip("/"))
+    lang = CFG.get("language", "en")
+    sisters = []
+    for cp in sorted(__import__("glob").glob(os.path.join(os.path.dirname(HERE.rstrip("/")), "*", "config.json"))):
+        name = os.path.basename(os.path.dirname(cp))
+        try:
+            c = json.load(open(cp))
+        except Exception:  # noqa: BLE001
+            continue
+        if name != me and c.get("live") is True and not c.get("paused") and c.get("language", "en") == lang and c.get("promo_line"):
+            sisters.append(c)
+    if not sisters:
+        return None
+    done = sum(1 for p in load_posted() if p.get("promo"))
+    return sisters[done % len(sisters)]
+
+
+def promo_comment(media_id, n_posted):
+    """Every 10th Reel: comment on it pointing to a sister channel. Never fails the post."""
+    if n_posted % PROMO_EVERY:
+        return ""
+    s = sister()
+    if not s:
+        return ""
+    msg = f"{s['promo_line']} 👉 @{s['instagram_username']}"
+    try:
+        call("POST", f"/{media_id}/comments", {"message": msg})
+        print("sister mention posted")
+        return s["instagram_username"]
+    except Exception as ex:  # noqa: BLE001
+        print("sister mention failed (post is fine):", str(ex)[:200])
+        return ""
 
 
 def pick_cta():
@@ -224,7 +264,8 @@ def main():
            "theme": q["theme"], "media_id": m.get("id", ""), "permalink": link,
            "audio_id": (track or {}).get("audio_id", ""), "audio_title": (track or {}).get("title", ""),
            "audio_artist": (track or {}).get("display_artist") or (track or {}).get("ig_username", ""),
-           "audio_source": (track or {}).get("_source", "silent"), "cta": cta}
+           "audio_source": (track or {}).get("_source", "silent"), "cta": cta,
+           "promo": promo_comment(m.get("id", ""), len(load_posted()) + 1)}
     new = not os.path.exists(POSTED)
     if not new:   # older logs lack newer columns: rewrite the header once
         old = list(csv.DictReader(open(POSTED)))
