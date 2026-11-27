@@ -237,6 +237,11 @@ def main():
             ig, _ = ig_user()
             t = audio.pick(ig, TOKEN, CFG["reel_seconds"])
             print("DRY_RUN check: account OK, music", "found: " + (t or {}).get("title", "") if t else "not found")
+            try:
+                perms = {p["permission"] for p in call("GET", "/me/permissions").get("data", []) if p.get("status") == "granted"}
+                print("DRY_RUN check: comment permission", "OK" if "instagram_manage_comments" in perms else "MISSING")
+            except Exception as ex:  # noqa: BLE001
+                print("DRY_RUN check: could not read permissions:", str(ex)[:120])
         except BaseException as ex:  # noqa: BLE001
             print("DRY_RUN check failed:", ex)
     if DRY or not urls or not TOKEN:
