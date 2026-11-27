@@ -20,12 +20,12 @@ MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
 FAILS = []
 MIN_STOCK = int(os.environ.get("MIN_STOCK", "120"))
 MIN_SCORE = int(os.environ.get("MIN_SCORE", "8"))
-WANT = TP["want"]   # asked for; the judge keeps only the 8+/10 ones
 BANNED = re.compile(r"\b(kill|suicide|die\b|dead\b|drunk|sex|hate|stupid|fat|politic|god\b|religio)", re.I)
 
 TP = CFG["topup"]   # per head: style (tone + examples), topics {theme: what to write about}, want {theme: n}, audience
 STYLE = TP["style"]
 TOPIC = TP["topics"]
+WANT = TP["want"]   # asked for; the judge keeps only the 8+/10 ones
 
 
 def pick_model():
