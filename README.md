@@ -16,7 +16,7 @@ insights) lives in a separate private repository that the workflows check out at
   that the 3 best by engagement per 1,000 reach are kept and 2 keep rotating.
 - Music comes from Instagram's Audio API: mood searches first, then the trending list; a Reel goes out
   silent rather than not at all if no track can be attached.
-- `insights.yml` pulls Reel and account metrics twice a day into each head's `insights/` folder with a
+- `insights.yml` pulls Reel and account metrics every 3 hours into each head's `insights/` folder with a
   `REPORT.md`. `topup.yml` asks Gemini (free tier) once a week for new lines, keeps only those a second pass
   scores 8+/10, and drops near-duplicates.
 
