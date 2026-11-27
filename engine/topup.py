@@ -18,6 +18,7 @@ POSTED = os.path.join(HERE, "posted.csv")
 KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
 FAILS = []
+BUSY = []   # themes skipped only because Google was overloaded
 MIN_STOCK = int(os.environ.get("MIN_STOCK", "120"))
 MIN_SCORE = int(os.environ.get("MIN_SCORE", "8"))
 BANNED = re.compile(r"\b(kill|suicide|die\b|dead\b|drunk|sex|hate|stupid|fat|politic|god\b|religio)", re.I)
@@ -44,6 +45,8 @@ def next_model():
     """Current model is busy: move to another flash model (newest first, lite last)."""
     global MODEL
     TRIED.add(MODEL)
+    if len(TRIED) >= 3:   # keep the weekly run short; Google outages pass
+        return False
     names = [n for n in models() if "flash" in n and "preview" not in n and "exp" not in n and "image" not in n and "tts" not in n and "live" not in n]
     names.sort(key=lambda n: ("lite" in n, [-int(x) if x.isdigit() else 0 for x in re.findall(r"\d+", n)]))
     for n in names:
@@ -80,15 +83,20 @@ def ask(theme, n, retry=True, attempt=1):
         print("Gemini failed:", e.code, e.read().decode(errors="replace")[:300])
         if e.code == 404 and retry and pick_model():
             return ask(theme, n, retry=False)
-        if e.code in (429, 500, 503) and attempt < 3:   # busy: wait and try again
-            import time; time.sleep(15 * attempt)
-            return ask(theme, n, retry, attempt + 1)
-        if e.code in (429, 500, 503) and next_model():   # still busy: another model
-            return ask(theme, n, retry, 1)
-        FAILS.append(theme)
-        return []
-    text = "".join(p.get("text", "") for c in d.get("candidates", []) for p in c.get("content", {}).get("parts", []))
-    return [re.sub(r"^[\-\*\d\.\)\s]+", "", l).strip().strip('"') for l in text.splitlines() if l.strip()]
+        busy = e.code in (429, 500, 503)
+    except (TimeoutError, urllib.error.URLError, OSError) as e:
+        print("Gemini timed out or unreachable:", type(e).__name__)
+        busy = True
+    else:
+        text = "".join(p.get("text", "") for c in d.get("candidates", []) for p in c.get("content", {}).get("parts", []))
+        return [re.sub(r"^[\-\*\d\.\)\s]+", "", l).strip().strip('"') for l in text.splitlines() if l.strip()]
+    if busy and attempt < 3:   # busy: wait and try again
+        import time; time.sleep(15 * attempt)
+        return ask(theme, n, retry, attempt + 1)
+    if busy and next_model():   # still busy: another model
+        return ask(theme, n, retry, 1)
+    (BUSY if busy else FAILS).append(theme)
+    return []
 
 
 def judge(lines, attempt=1):
@@ -103,11 +111,11 @@ def judge(lines, attempt=1):
     try:
         with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=120) as r:
             d = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        if e.code in (429, 500, 503) and attempt < 3:
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        if attempt < 3:
             import time; time.sleep(15 * attempt)
             return judge(lines, attempt + 1)
-        print("Gemini judge failed, keeping none:", e.code)
+        print("Gemini judge failed, keeping none:", getattr(e, "code", type(e).__name__))
         return []
     text = "".join(p.get("text", "") for c in d.get("candidates", []) for p in c.get("content", {}).get("parts", []))
     keep = []
@@ -151,8 +159,10 @@ def main():
     with open(QUOTES, "a", newline="") as f:
         csv.DictWriter(f, fieldnames=["id", "theme", "text", "source", "added"]).writerows(added)
     print(f"added {len(added)} quotes (model {MODEL})")
-    if len(FAILS) == len(WANT):
-        raise SystemExit("Gemini failed for every theme: check GEMINI_API_KEY / model")
+    if BUSY:
+        print(f"Google was overloaded for {len(BUSY)} theme(s); they will be tried again next week")
+    if FAILS and len(FAILS) + len(BUSY) == len(WANT):
+        raise SystemExit("Gemini refused every theme: check GEMINI_API_KEY / model")
     # the new lines themselves are not printed: logs of this repo are public
 
 
