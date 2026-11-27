@@ -6,7 +6,7 @@ and appends the keepers to quotes.csv (source=gemini). Skips the call when plent
 Filters: a second Gemini pass scores each line 1-10 for wit and shareability (keeps 8+), 25-120 characters, no hashtags/emoji/@, no famous-quote attributions, not too close
 (similarity > 0.75) to any existing line, no unsafe or off-brand words.
 
-Env: GEMINI_API_KEY (GitHub secret), GEMINI_MODEL (default gemini-2.5-flash), MIN_STOCK (default 120).
+Env: GEMINI_API_KEY (GitHub secret), GEMINI_MODEL (default gemini-3.8-flash; busy or retired models fall back to other flash models), MIN_STOCK (default 120).
 """
 import csv, datetime, difflib, json, os, re, urllib.error, urllib.request
 
@@ -26,6 +26,30 @@ TP = CFG["topup"]   # per head: style (tone + examples), topics {theme: what to 
 STYLE = TP["style"]
 TOPIC = TP["topics"]
 WANT = TP["want"]   # asked for; the judge keeps only the 8+/10 ones
+
+
+TRIED = set()
+
+
+def models():
+    try:
+        with urllib.request.urlopen(f"https://generativelanguage.googleapis.com/v1beta/models?key={KEY}&pageSize=200", timeout=60) as r:
+            return [m["name"].split("/")[-1] for m in json.loads(r.read()).get("models", [])
+                    if "generateContent" in m.get("supportedGenerationMethods", [])]
+    except Exception as ex:  # noqa: BLE001
+        print("could not list models:", ex); return []
+
+
+def next_model():
+    """Current model is busy: move to another flash model (newest first, lite last)."""
+    global MODEL
+    TRIED.add(MODEL)
+    names = [n for n in models() if "flash" in n and "preview" not in n and "exp" not in n and "image" not in n and "tts" not in n and "live" not in n]
+    names.sort(key=lambda n: ("lite" in n, [-int(x) if x.isdigit() else 0 for x in re.findall(r"\d+", n)]))
+    for n in names:
+        if n not in TRIED:
+            print("model busy, trying", n); MODEL = n; return True
+    return False
 
 
 def pick_model():
@@ -56,16 +80,18 @@ def ask(theme, n, retry=True, attempt=1):
         print("Gemini failed:", e.code, e.read().decode(errors="replace")[:300])
         if e.code == 404 and retry and pick_model():
             return ask(theme, n, retry=False)
-        if e.code in (429, 500, 503) and attempt < 4:   # busy: wait and try again
-            import time; time.sleep(20 * attempt)
+        if e.code in (429, 500, 503) and attempt < 3:   # busy: wait and try again
+            import time; time.sleep(15 * attempt)
             return ask(theme, n, retry, attempt + 1)
+        if e.code in (429, 500, 503) and next_model():   # still busy: another model
+            return ask(theme, n, retry, 1)
         FAILS.append(theme)
         return []
     text = "".join(p.get("text", "") for c in d.get("candidates", []) for p in c.get("content", {}).get("parts", []))
     return [re.sub(r"^[\-\*\d\.\)\s]+", "", l).strip().strip('"') for l in text.splitlines() if l.strip()]
 
 
-def judge(lines):
+def judge(lines, attempt=1):
     """Second Gemini pass: score each candidate 1-10 for wit and shareability; keep 8+."""
     if not lines:
         return []
@@ -78,6 +104,9 @@ def judge(lines):
         with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=120) as r:
             d = json.loads(r.read())
     except urllib.error.HTTPError as e:
+        if e.code in (429, 500, 503) and attempt < 3:
+            import time; time.sleep(15 * attempt)
+            return judge(lines, attempt + 1)
         print("Gemini judge failed, keeping none:", e.code)
         return []
     text = "".join(p.get("text", "") for c in d.get("candidates", []) for p in c.get("content", {}).get("parts", []))
