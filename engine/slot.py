@@ -135,7 +135,27 @@ def decide():
     return act, s or "manual", day, today, why
 
 
+def write_plan():
+    """plan.json: today's and tomorrow's posting slots (local times), for the dashboard's next-post timer.
+    Only rewritten when the plan changes, so it is committed about once a day."""
+    today = now_local().date()
+    days = {}
+    for k in (0, 1):
+        d = today + datetime.timedelta(days=k)
+        days[d.isoformat()] = plan(ramp_day(d))[0]
+    out = {"utc_offset_minutes": int(CFG.get("utc_offset_minutes", 0)), "days": days, "why": plan(ramp_day(today))[1]}
+    path = os.path.join(HERE, "plan.json")
+    try:
+        if json.load(open(path)) == out:
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    json.dump(out, open(path, "w"), indent=1)
+
+
 if __name__ == "__main__":
+    if os.environ.get("WRITE_PLAN") == "1":
+        write_plan()
     act, s, day, today, why = decide()
     print(f"day {day}, slot {s}, today's slots {today} ({why}) -> {'POST' if act else 'skip'}")
     out = os.environ.get("GITHUB_OUTPUT")

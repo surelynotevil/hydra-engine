@@ -39,6 +39,13 @@ jobs:
           path: content
       - id: check
         run: python3 engine/run.py check
+      - name: Save the posting plan (for the dashboard's next-post timer)
+        working-directory: content
+        run: |
+          git config user.name "hydra-bot"
+          git config user.email "hydra-bot@users.noreply.github.com"
+          git add -A heads/*/plan.json 2>/dev/null || true
+          git diff --cached --quiet || (git commit -q -m "posting plan [CI Skip]" && git pull -q --rebase && git push -q)
       - if: steps.check.outputs.active == 'true' || env.FORCE == '1'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg

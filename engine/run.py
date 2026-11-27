@@ -39,7 +39,7 @@ def main(cmd):
     if cmd == "check":
         active = []
         for h in hs:
-            r = run("slot.py", h, {"GITHUB_OUTPUT": ""})
+            r = run("slot.py", h, {"GITHUB_OUTPUT": "", "WRITE_PLAN": "1"})
             if "-> POST" in r.stdout:
                 active.append(os.path.basename(h))
         print("heads posting in this slot:", len(active))
