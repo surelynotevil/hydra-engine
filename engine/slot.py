@@ -55,15 +55,27 @@ def slot_scores():
     return {s: (sum(v) / len(v), len(v)) for s, v in got.items()}
 
 
+def _intel():
+    try:
+        import intel
+        return intel.load()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def plan(day=None):
     """The slots that post today, and why."""
     day = day or ramp_day()
+    I = _intel()
+    dp = {k: v for k, v in (I.get("daypart") or {}).items() if v.get("solid")}
+    explore_days = 7 if len(dp) >= 4 else EXPLORE_DAYS   # Hydra already knows which times work: learn faster
+    lift = lambda s: dp.get(_daypart(s), {}).get("lift", 1.0)
     n = min(posts_per_day(day), len(SLOTS))
     if n <= 0:
         return [], "no posts scheduled"
     scores = slot_scores()
     known = {s: v for s, v in scores.items() if v[1] >= MIN_POINTS}
-    if day <= EXPLORE_DAYS or len(known) < MIN_SLOTS_KNOWN:
+    if day <= explore_days or len(known) < MIN_SLOTS_KNOWN:
         start = 0 if day % 2 else 1
         picks = [SLOTS[(start + 2 * i) % len(SLOTS)] for i in range(n)]
         if n > len(SLOTS) // 2:   # more posts than half the slots: fill from the other set
@@ -72,8 +84,19 @@ def plan(day=None):
     best = sorted(known, key=lambda s: known[s][0], reverse=True)[: min(BEST_KEEP, n)]
     rest = [s for s in SLOTS if s not in best]
     k = n - len(best)
-    picks = best + [rest[(day * k + i) % len(rest)] for i in range(k)]
+    if dp and k:   # one test slot from the strongest Hydra daypart, the rest rotate
+        strong = sorted(rest, key=lift, reverse=True)[:2]
+        first = strong[day % len(strong)]
+        rest2 = [s for s in rest if s != first]
+        picks = best + [first] + [rest2[(day * k + i) % len(rest2)] for i in range(k - 1)]
+    else:
+        picks = best + [rest[(day * k + i) % len(rest)] for i in range(k)]
     return sorted(set(picks)), "learn: best " + ", ".join(best) + " + testing others"
+
+
+def _daypart(hhmm):
+    h = int(hhmm.split(":")[0])
+    return f"{h // 3 * 3:02d}-{h // 3 * 3 + 3:02d}"
 
 
 def cron_to_local(cron):

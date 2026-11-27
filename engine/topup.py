@@ -25,6 +25,19 @@ BANNED = re.compile(r"\b(kill|suicide|die\b|dead\b|drunk|sex|hate|stupid|fat|pol
 
 TP = CFG["topup"]   # per head: style (tone + examples), topics {theme: what to write about}, want {theme: n}, audience
 STYLE = TP["style"]
+try:   # Hydra intel: what works across all channels, and the best lines from other channels as a quality bar
+    import intel as _intel
+    _I = _intel.load()
+    _tips = list(_I.get("takeaways") or [])
+    _mine = os.path.basename(HERE.rstrip("/"))
+    _others = [t["text"] for t in (_I.get("top_lines") or []) if t.get("folder") != _mine][:4]
+    if _tips or _others:
+        STYLE += "\nWhat performs best across our other Instagram channels (use the patterns, not the topics):\n"
+        STYLE += "".join(f"- {t}\n" for t in _tips)
+        if _others:
+            STYLE += "Top-performing lines from other channels (different niches; do not copy, match the punch):\n" + "".join(f"- {t}\n" for t in _others)
+except Exception:  # noqa: BLE001
+    pass
 TOPIC = TP["topics"]
 WANT = TP["want"]   # asked for; the judge keeps only the 8+/10 ones
 

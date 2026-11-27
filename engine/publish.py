@@ -25,7 +25,9 @@ DRY = DRY_ASKED or not LIVE
 UA = {"User-Agent": "HydraEngine/1.0"}
 QUOTES = os.path.join(HERE, "quotes.csv")
 POSTED = os.path.join(HERE, "posted.csv")
-PCOLS = ["posted_utc", "slot", "quote_id", "theme", "media_id", "permalink", "audio_id", "audio_title", "audio_artist", "audio_source"]
+PCOLS = ["posted_utc", "slot", "quote_id", "theme", "media_id", "permalink", "audio_id", "audio_title", "audio_artist", "audio_source", "cta"]
+import intel  # noqa: E402
+INTEL = intel.load()
 
 CAP = CFG["captions"]   # per head: theme_cycle, hashtags {theme: [...]}, ctas [...], hashtags_per_post
 THEME_CYCLE = CAP["theme_cycle"]
@@ -59,9 +61,14 @@ def pick_quote(posted):
     quotes = list(csv.DictReader(open(QUOTES)))
     used = {p["quote_id"] for p in posted}
     theme = THEME_CYCLE[len(posted) % len(THEME_CYCLE)]
+    best_len = intel.solid_best(INTEL, "length")   # Hydra intel: lean towards the line length that works best
     for t in [theme] + [x for x in dict.fromkeys(THEME_CYCLE) if x != theme]:
         fresh = [q for q in quotes if q["id"] not in used and q["theme"] == t]
         if fresh:
+            if best_len:
+                near = [q for q in fresh[:8] if intel.length_bucket(q["text"]) == best_len[0]]
+                if near:
+                    return near[0]
             return fresh[0]
     # everything used once: repost the best performer not used in 60 days (scores from insights)
     scores = {}
@@ -77,10 +84,21 @@ def pick_quote(posted):
     return pool[0]
 
 
+def pick_cta():
+    """Weight this head's CTAs by how their style (tag / send / save) performs across Hydra; keep some variety."""
+    lifts = (INTEL.get("cta_style") or {})
+    w = []
+    for c in CTAS:
+        v = lifts.get(intel.cta_style(c), {})
+        w.append(max(0.3, v.get("lift", 1.0)) if v.get("solid") else 1.0)
+    return random.choices(CTAS, weights=w)[0]
+
+
 def caption(q):
     tags = HASHTAGS.get(q["theme"]) or sum(HASHTAGS.values(), [])
     chosen = random.sample(tags, min(CAP.get("hashtags_per_post", 5), len(tags)))
-    return f"{q['text']}\n\n{random.choice(CTAS)}\n\n{' '.join(chosen)}"
+    cta = pick_cta()
+    return f"{q['text']}\n\n{cta}\n\n{' '.join(chosen)}", cta
 
 
 # ---------- media hosting (Cloudflare Pages, free) ----------
@@ -167,7 +185,7 @@ def main():
     cover = os.path.join(out, f"pb-{stamp}.jpg")
     from PIL import Image
     Image.open(png).convert("RGB").save(cover, quality=92)
-    cap = caption(q)
+    cap, cta = caption(q)
     open(os.path.join(out, "caption.txt"), "w").write(cap)
     print(f"slot {slot_name} | quote {q['id']} ({q['theme']})")
     if not LIVE and not DRY_ASKED:
@@ -206,8 +224,13 @@ def main():
            "theme": q["theme"], "media_id": m.get("id", ""), "permalink": link,
            "audio_id": (track or {}).get("audio_id", ""), "audio_title": (track or {}).get("title", ""),
            "audio_artist": (track or {}).get("display_artist") or (track or {}).get("ig_username", ""),
-           "audio_source": (track or {}).get("_source", "silent")}
+           "audio_source": (track or {}).get("_source", "silent"), "cta": cta}
     new = not os.path.exists(POSTED)
+    if not new:   # older logs lack newer columns: rewrite the header once
+        old = list(csv.DictReader(open(POSTED)))
+        if old and set(PCOLS) - set(old[0].keys()):
+            with open(POSTED, "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=PCOLS); w.writeheader(); w.writerows({k: r.get(k, "") for k in PCOLS} for r in old)
     with open(POSTED, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=PCOLS)
         if new:

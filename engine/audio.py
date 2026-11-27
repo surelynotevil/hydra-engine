@@ -38,7 +38,17 @@ def pick(ig_user_id, token, seconds=15):
     used = recently_used(CFG["avoid_repeat_days"])
     order = ["music", "original_sound"] if CFG.get("music_first", True) else ["original_sound", "music"]
     moods = [(order[0], q) for q in random.sample(CFG["fallback_searches"], len(CFG["fallback_searches"]))]
-    if CFG.get("mood_first", True):
+    mood_first = CFG.get("mood_first", True)
+    try:
+        import intel
+        mu = {k: v for k, v in (intel.load().get("music") or {}).items() if v.get("solid")}
+        if "trending music" in mu and "mood search" in mu:   # Hydra intel overrides the head default when the gap is clear
+            gap = mu["trending music"]["lift"] - mu["mood search"]["lift"]
+            if abs(gap) >= 0.15:
+                mood_first = gap < 0
+    except Exception:  # noqa: BLE001
+        pass
+    if mood_first:
         # global audience: calm mood searches first, the (country-based) trending list only as a fallback
         tries = moods + [(order[0], None), (order[1], None)]
     else:
