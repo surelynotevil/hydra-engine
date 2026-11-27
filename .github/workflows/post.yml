@@ -2,7 +2,7 @@ name: Post
 
 on:
   schedule:
-    - cron: "11,41 * * * *"   # every half hour; each head's own slots decide what posts
+    - cron: "11,41 * * * *"   # every half hour (:11 and :41 UTC); each head's own slots decide what posts
   workflow_dispatch:
     inputs:
       dry_run:
