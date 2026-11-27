@@ -43,3 +43,13 @@ def mask(value):
     """Tell GitHub to hide a value in this job's logs from now on."""
     if value and os.environ.get("GITHUB_ACTIONS"):
         sys.__stdout__.write(f"::add-mask::{value}\n")
+
+
+def mask_head(cfg, name):
+    """Hide everything that names a head (folder, handle, brand, media address) from this job's logs."""
+    for v in (name, cfg.get("instagram_username"), cfg.get("brand"), cfg.get("media_project"),
+              (cfg.get("media_base") or "").replace("https://", "")):
+        mask(v)
+
+
+mask_head(CFG, NAME)

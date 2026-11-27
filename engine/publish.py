@@ -115,7 +115,7 @@ def upload(files):
             except Exception:  # noqa: BLE001
                 pass
             time.sleep(4)
-        print("uploaded", u)
+        print("uploaded", os.path.basename(u))
     return urls
 
 
@@ -169,7 +169,7 @@ def main():
     Image.open(png).convert("RGB").save(cover, quality=92)
     cap = caption(q)
     open(os.path.join(out, "caption.txt"), "w").write(cap)
-    print(f"slot {slot_name} | quote {q['id']} ({q['theme']}): {q['text']}")
+    print(f"slot {slot_name} | quote {q['id']} ({q['theme']})")
     if not LIVE and not DRY_ASKED:
         print("SOCIAL_LIVE is not 'true': rendered only, nothing uploaded or published.")
         return
@@ -201,7 +201,7 @@ def main():
     wait_ready(c["id"])
     m = call("POST", f"/{ig}/media_publish", {"creation_id": c["id"]})
     link = call("GET", f"/{m['id']}", {"fields": "permalink"}).get("permalink", "")
-    print("published", link)
+    print("published")
     row = {"posted_utc": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M"), "slot": slot_name, "quote_id": q["id"],
            "theme": q["theme"], "media_id": m.get("id", ""), "permalink": link,
            "audio_id": (track or {}).get("audio_id", ""), "audio_title": (track or {}).get("title", ""),

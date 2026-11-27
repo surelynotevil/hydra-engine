@@ -30,6 +30,9 @@ def run(script, head, extra=None):
 
 def main(cmd):
     hs = heads()
+    import paths
+    for h in hs:   # hide head names before anything is printed
+        paths.mask_head(json.load(open(os.path.join(h, "config.json"))), os.path.basename(h))
     if not hs:
         print("no heads found")
         return 0
@@ -39,23 +42,23 @@ def main(cmd):
             r = run("slot.py", h, {"GITHUB_OUTPUT": ""})
             if "-> POST" in r.stdout:
                 active.append(os.path.basename(h))
-        print("heads posting in this slot:", ", ".join(active) or "none")
+        print("heads posting in this slot:", len(active))
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                 f.write(f"active={'true' if active else 'false'}\n")
         return 0
     script = {"post": "publish.py", "insights": "insights.py", "topup": "topup.py"}[cmd]
     failed = []
-    for h in hs:
+    for i, h in enumerate(hs, 1):
         name = os.path.basename(h)
         r = run(script, h)
-        print(f"===== {name} =====")
+        print(f"===== head {i} =====")
         sys.stdout.write(r.stdout)
         sys.stdout.write(r.stderr[-2000:] if r.returncode else "")
         if r.returncode:
             failed.append(name)
     if failed:
-        print("FAILED:", ", ".join(failed))
+        print("FAILED:", len(failed), "head(s)")
         return 1
     return 0
 
