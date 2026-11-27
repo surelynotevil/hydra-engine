@@ -106,11 +106,49 @@ def cron_to_local(cron):
     return t.strftime("%H:%M")
 
 
+CATCH_UP_MIN = 100   # a planned slot can still go out this long after its time (GitHub delays and drops scheduled runs)
+
+
+def _posted_slots():
+    """(local date, slot) pairs already posted, from posted.csv."""
+    path = os.path.join(HERE, "posted.csv")
+    done = set()
+    if os.path.exists(path):
+        for r in csv.DictReader(open(path)):
+            try:
+                t = datetime.datetime.strptime(r["posted_utc"][:16], "%Y-%m-%d %H:%M").replace(tzinfo=datetime.timezone.utc).astimezone(LOCAL)
+            except (KeyError, ValueError):
+                continue
+            done.add((t.date().isoformat(), r.get("slot") or ""))
+    return done
+
+
+def due_slot():
+    """Earliest planned slot (today's or yesterday's plan) whose time has come, at most CATCH_UP_MIN minutes ago,
+    and that hasn't been posted yet. Makes posting independent of exactly when GitHub fires the cron."""
+    n = now_local()
+    done = _posted_slots()
+    due = []
+    for back in (1, 0):
+        d = n.date() - datetime.timedelta(days=back)
+        for hhmm in plan(ramp_day(d))[0]:
+            h, m = map(int, hhmm.split(":"))
+            t = datetime.datetime.combine(d, datetime.time(h, m), tzinfo=LOCAL)
+            if t <= n + datetime.timedelta(minutes=5) and (n - t).total_seconds() <= CATCH_UP_MIN * 60 and (d.isoformat(), hhmm) not in done:
+                due.append((t, hhmm, d))
+    return min(due) if due else None
+
+
 def current_slot():
     """The slot this run is for: the head slot within 20 minutes of the time the cron fired (or of now)."""
     if (os.environ.get("SLOT") or "").strip():
         return os.environ["SLOT"].strip()
-    if (os.environ.get("CRON") or "").strip():
+    cron = (os.environ.get("CRON") or "").strip()
+    if cron and not all(f.isdigit() for f in cron.split()[:2]):
+        # one cron for every slot ("11,41 * * * *"): post whichever planned slot is due and not yet posted
+        d = due_slot()
+        return d[1] if d else ""
+    if cron:
         hh, mm = map(int, cron_to_local(os.environ["CRON"]).split(":"))
         n = now_local().replace(hour=hh, minute=mm)
         window = 20
@@ -131,6 +169,11 @@ def decide():
     day = ramp_day()
     s = current_slot()
     today, why = plan(day)
+    cron = (os.environ.get("CRON") or "").strip()
+    if cron and not all(f.isdigit() for f in cron.split()[:2]):
+        d = due_slot()   # may be a slot from yesterday's plan just after midnight
+        if d and d[2] != now_local().date():
+            today = plan(ramp_day(d[2]))[0]
     act = os.environ.get("FORCE") == "1" or s in today
     return act, s or "manual", day, today, why
 
