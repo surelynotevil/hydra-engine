@@ -1,0 +1,62 @@
+name: Post
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"   # every half hour; each head's own slots decide what posts
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render and upload only (do not publish)"
+        type: boolean
+        default: true
+      force:
+        description: "Run every head even if it isn't one of its slots"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post
+  cancel-in-progress: false
+
+env:
+  CONTENT_DIR: ${{ github.workspace }}/content
+  CRON: ${{ github.event.schedule }}
+  FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '0' }}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.CONTENT_TOKEN }}
+          path: content
+      - id: check
+        run: python3 engine/run.py check
+      - if: steps.check.outputs.active == 'true' || env.FORCE == '1'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow
+      - if: steps.check.outputs.active == 'true' || env.FORCE == '1'
+        name: Post
+        env:
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SOCIAL_LIVE: ${{ vars.SOCIAL_LIVE }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: python3 engine/run.py post
+      - if: always() && (steps.check.outputs.active == 'true' || env.FORCE == '1')
+        name: Save logs to the content repo
+        working-directory: content
+        run: |
+          git config user.name "hydra-bot"
+          git config user.email "hydra-bot@users.noreply.github.com"
+          git add -A heads/*/posted.csv 2>/dev/null || true
+          git diff --cached --quiet || (git commit -q -m "posting log [CI Skip]" && git pull -q --rebase && git push -q)

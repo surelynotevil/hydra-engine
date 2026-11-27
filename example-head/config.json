@@ -1,0 +1,109 @@
+{
+  "brand": "Example Head",
+  "instagram_username": "example.handle",
+  "media_project": "example-media",
+  "media_base": "https://example-media.pages.dev",
+  "reel_seconds": 15,
+  "utc_offset_minutes": 0,
+  "launch_date": "2026-01-01",
+  "live": false,
+  "paused": false,
+  "card": {
+    "text_box": [
+      100,
+      150,
+      980,
+      555
+    ],
+    "font_max": 64,
+    "font_min": 40,
+    "text_rgb": [
+      62,
+      44,
+      32
+    ],
+    "handle_xy": [
+      -1,
+      585
+    ],
+    "handle_size": 30,
+    "handle_rgb": [
+      150,
+      120,
+      95
+    ]
+  },
+  "audio": {
+    "music_first": true,
+    "avoid_repeat_days": 3,
+    "fallback_searches": [
+      "lofi",
+      "acoustic",
+      "piano",
+      "cozy",
+      "chill",
+      "indie folk",
+      "jazz",
+      "calm"
+    ],
+    "audio_volume": 100,
+    "video_volume": 0,
+    "mood_first": true
+  },
+  "captions": {
+    "theme_cycle": [
+      "a",
+      "b",
+      "a",
+      "b",
+      "mix"
+    ],
+    "hashtags": {
+      "a": [
+        "#tagone",
+        "#tagtwo",
+        "#tagthree",
+        "#tagfour",
+        "#tagfive"
+      ],
+      "b": [
+        "#tagsix",
+        "#tagseven",
+        "#tageight",
+        "#tagnine",
+        "#tagten"
+      ]
+    },
+    "ctas": [
+      "Send this to the friend who gets it.",
+      "Tag someone who'd do exactly this."
+    ],
+    "hashtags_per_post": 5
+  },
+  "topup": {
+    "style": "Describe the page, its audience and tone here, with 3-4 example lines that set the bar.",
+    "topics": {
+      "a": "what theme a is about",
+      "b": "what theme b is about",
+      "mix": "lines that combine a and b"
+    },
+    "want": {
+      "a": 40,
+      "b": 40,
+      "mix": 15
+    },
+    "audience": "fan of the niche"
+  },
+  "slots_local": [
+    "00:11",
+    "02:41",
+    "05:11",
+    "07:41",
+    "10:11",
+    "12:41",
+    "15:11",
+    "17:41",
+    "20:11",
+    "22:41"
+  ]
+}

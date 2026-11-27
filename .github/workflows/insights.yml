@@ -1,0 +1,39 @@
+name: Insights
+
+on:
+  schedule:
+    - cron: "51 2 * * *"
+    - cron: "51 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: insights
+
+env:
+  CONTENT_DIR: ${{ github.workspace }}/content
+
+jobs:
+  insights:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.CONTENT_TOKEN }}
+          path: content
+      - name: Pull insights
+        env:
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+        run: python3 engine/run.py insights
+      - if: always()
+        name: Save to the content repo
+        working-directory: content
+        run: |
+          git config user.name "hydra-bot"
+          git config user.email "hydra-bot@users.noreply.github.com"
+          git add -A heads/*/insights 2>/dev/null || true
+          git diff --cached --quiet || (git commit -q -m "insights [CI Skip]" && git pull -q --rebase && git push -q)
